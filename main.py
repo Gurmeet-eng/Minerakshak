@@ -26,7 +26,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
-from lidar import lidar          # add with the other imports
+
 import cv2
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -383,30 +383,13 @@ def simulate_safety_loop():
 app = FastAPI(title="mineRakshak Backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-def lidar_alert_loop():
-    while True:
-        time.sleep(0.3)
-        if current_trip_id is None:
-            continue
-        ahead = [o for o in lidar.snapshot()["objects"]
-                 if o["type"] == "truck" and abs(o["x"]) < 3 and 0 < o["y"] < 30]
-        if ahead:
-            d = min(o["y"] for o in ahead)
-            set_state(dict(alert="HEAVY VEHICLE AHEAD", severity="HIGH",
-                           recommended_action="REDUCE SPEED",
-                           heavy_vehicle_detected=True, heavy_vehicle_distance_m=d))
-            
+
 @app.on_event("startup")
 async def on_startup():
-    threading.Thread(target=lidar_alert_loop, daemon=True).start()
     threading.Thread(target=simulate_safety_loop, daemon=True).start()
     threading.Thread(target=_detection_loop, daemon=True).start()
     asyncio.create_task(broadcast_state())
-    lidar.start()
 
-@app.get("/lidar")
-def get_lidar():
-    return lidar.snapshot()
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard_page():

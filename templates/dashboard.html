@@ -335,15 +335,6 @@
   .pulse-ring{position:absolute;inset:-8px;border:2px solid var(--warning);border-radius:50%;
     animation:ringPulse 1s ease-out;pointer-events:none;}
   @keyframes ringPulse{0%{transform:scale(0.6);opacity:1;}100%{transform:scale(2.4);opacity:0;}}
-  .lidar-panel{position:absolute;left:14px;bottom:14px;z-index:5000;width:250px;
-  background:rgba(9,18,28,0.88);border:1px solid rgba(255,255,255,0.16);border-radius:10px;
-  overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.5);}
-  .lidar-panel .lcp-head{display:flex;align-items:center;justify-content:space-between;
-    padding:6px 10px;font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,0.35);}
-  .lidar-panel .lcp-head button{border:1px solid rgba(255,255,255,0.25);background:transparent;
-    color:#cfe0ee;font-size:9.5px;padding:2px 6px;border-radius:5px;cursor:pointer;margin-left:4px;}
-  .lidar-panel .lcp-head button.active{background:var(--accent-blue);border-color:var(--accent-blue);color:#fff;}
-  #lidarCanvas{display:block;width:250px;height:290px;}
 </style>
 </head>
 <body>
@@ -391,16 +382,7 @@
         <!-- ================= NAVIGATION TAB ================= -->
         <div id="panel-navigation" style="display:flex;flex:1;gap:14px;min-height:0;">
           <div class="map-panel" id="mapPanel">
-            <div class="lidar-panel">
-              <div class="lcp-head">
-                <span>LIDAR <span id="lidarMode" style="color:#87a0b6;font-weight:400;"></span></span>
-                <div>
-                  <button id="lidarBtnTesla" class="active" onclick="setLidarView('tesla')">Vehicles</button>
-                  <button id="lidarBtnPoints" onclick="setLidarView('points')">Points</button>
-                </div>
-              </div>
-              <canvas id="lidarCanvas" width="500" height="580"></canvas>
-            </div>
+
             <div id="leafletMap"></div>
 
             <div class="compass"><span>N</span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 L15 12 L12 10 L9 12 Z"/></svg></div>
@@ -1288,95 +1270,6 @@ document.getElementById('tripPausedBadge').classList.add('show');
 
 connectMineRakshakBackend();
 </script>
-<script>
-  (function(){
-    const cv = document.getElementById('lidarCanvas'), ctx = cv.getContext('2d');
-    const W = cv.width, H = cv.height;
-    const egoX = W/2, egoY = H*0.84;
-    let data = {points:[], objects:[], range_m:40, mode:''};
-    let view = 'tesla';
-    const COLORS = {truck:'#f2a93b', car:'#cfe0ee', person:'#3bc46a'};
 
-    window.setLidarView = v => {
-      view = v;
-      document.getElementById('lidarBtnTesla').classList.toggle('active', v==='tesla');
-      document.getElementById('lidarBtnPoints').classList.toggle('active', v==='points');
-    };
-
-    async function poll(){
-      try{
-        const r = await fetch('/lidar');
-        data = await r.json();
-        document.getElementById('lidarMode').textContent = '· ' + data.mode;
-      }catch(e){}
-      setTimeout(poll, 120);
-    }
-
-    function drawTruck(x, y, w, l, color, danger, isEgo){
-      ctx.save();
-      ctx.translate(x, y);
-      if (danger){ ctx.shadowColor = '#e6483a'; ctx.shadowBlur = 24; }
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.roundRect(-w/2, -l/2, w, l, Math.min(w,l)*0.22); ctx.fill();
-      ctx.shadowBlur = 0;
-      // cab + windshield at the front (top) so heading is obvious
-      ctx.fillStyle = 'rgba(10,20,31,0.55)';
-      ctx.fillRect(-w*0.38, -l/2 + l*0.08, w*0.76, l*0.16);
-      if (isEgo){ ctx.strokeStyle = '#2f8fef'; ctx.lineWidth = 3; ctx.stroke(); }
-      ctx.restore();
-    }
-
-    function draw(){
-      const s = (egoY - 20) / data.range_m;          // pixels per metre
-      ctx.clearRect(0,0,W,H);
-      ctx.fillStyle = '#0a141f'; ctx.fillRect(0,0,W,H);
-
-      // lane strip
-      ctx.fillStyle = '#131f2c';
-      ctx.fillRect(egoX - 8*s, 0, 16*s, H);
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.setLineDash([16,16]); ctx.lineWidth = 2;
-      for (const lx of [-4, 0, 4]){
-        ctx.beginPath(); ctx.moveTo(egoX + lx*s, 0); ctx.lineTo(egoX + lx*s, H); ctx.stroke();
-      }
-      ctx.setLineDash([]);
-
-      // range rings
-      ctx.strokeStyle = 'rgba(47,143,239,0.28)'; ctx.fillStyle = '#87a0b6';
-      ctx.font = '18px sans-serif'; ctx.lineWidth = 1.5;
-      for (const r of [10,20,30,40]){
-        ctx.beginPath(); ctx.arc(egoX, egoY, r*s, Math.PI*1.05, Math.PI*1.95); ctx.stroke();
-        ctx.fillText(r+'m', egoX + 6, egoY - r*s + 18);
-      }
-
-      // point cloud
-      ctx.fillStyle = view === 'points' ? '#4fe3ff' : 'rgba(79,227,255,0.22)';
-      const ps = view === 'points' ? 4 : 3;
-      for (const p of data.points)
-        ctx.fillRect(egoX + p[0]*s - ps/2, egoY - p[1]*s - ps/2, ps, ps);
-
-      // vehicles (Tesla-style)
-      if (view === 'tesla'){
-        for (const o of data.objects){
-          const dist = Math.hypot(o.x, o.y);
-          const danger = o.type === 'truck' && dist < 15;
-          ctx.save();
-          ctx.translate(egoX + o.x*s, egoY - o.y*s);
-          ctx.rotate(o.heading);
-          drawTruck(0, 0, o.w*s, o.l*s, COLORS[o.type] || '#fff', danger, false);
-          ctx.restore();
-          ctx.fillStyle = '#fff'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText(Math.round(dist)+' m', egoX + o.x*s, egoY - o.y*s - (o.l*s)/2 - 8);
-          ctx.textAlign = 'start';
-        }
-      }
-
-      // your truck
-      drawTruck(egoX, egoY, 4*s, 9*s, '#f5a623', false, true);
-      requestAnimationFrame(draw);
-    }
-
-    poll(); draw();
-  })();
-</script>
 </body>
 </html>
