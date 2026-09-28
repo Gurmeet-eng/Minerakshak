@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mineRakshak — Mining Safety Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg-dark:#0a141f;
+    --bg-panel:#0d1e30;
+    --bg-panel-2:#11283e;
+    --border-col:#1f3a52;
+    --text-light:#eef3f8;
+    --text-dim:#87a0b6;
+    --accent-blue:#2f8fef;
+    --accent-blue-dim:#1c5fa8;
+    --danger:#e6483a;
+    --danger-bg:rgba(230,72,58,0.14);
+    --warning:#f2a93b;
+    --warning-bg:rgba(242,169,59,0.14);
+    --info:#3aa0f2;
+    --info-bg:rgba(58,160,242,0.14);
+    --success:#3bc46a;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:radial-gradient(circle at 50% 30%, #1a2229, #05090d 75%);
+    font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;padding:24px;
+  }
+  .device{
+    width:min(1400px,96vw);
+    aspect-ratio:16/9;
+    background:linear-gradient(155deg,#2b2f33,#1a1c1e 60%,#101214);
+    border-radius:28px;
+    padding:16px;
+    display:flex;gap:14px;
+    box-shadow:0 30px 70px rgba(0,0,0,0.6), inset 0 0 0 2px rgba(255,255,255,0.04);
+    position:relative;
+  }
+  .device::before{
+    content:"";position:absolute;inset:0;border-radius:28px;
+    background:repeating-linear-gradient(115deg,rgba(255,255,255,0.02) 0 2px,transparent 2px 6px);
+    pointer-events:none;
+  }
+  .screen-wrap{
+    flex:1;border-radius:16px;overflow:hidden;background:var(--bg-dark);
+    position:relative;
+    box-shadow:inset 0 0 0 3px #000, inset 0 0 30px rgba(0,0,0,0.7);
+  }
+  .side-buttons{
+    width:56px;display:flex;flex-direction:column;align-items:center;
+    justify-content:space-between;padding:26px 0;flex-shrink:0;
+  }
+  .bezel-btn{
+    width:38px;height:38px;border-radius:50%;
+    background:linear-gradient(155deg,#3a3f44,#202225);
+    display:flex;align-items:center;justify-content:center;
+    color:#aeb8c0;cursor:pointer;
+    box-shadow:0 2px 4px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.08);
+    transition:color .15s, box-shadow .15s;
+  }
+  .bezel-btn:hover{color:#fff;}
+  .bezel-btn.on{color:var(--accent-blue);box-shadow:0 0 0 2px var(--accent-blue), 0 2px 4px rgba(0,0,0,.5);}
+  .bezel-btn svg{width:18px;height:18px;}
+
+  /* ---------- dashboard ---------- */
+  .dashboard{display:flex;flex-direction:column;height:100%;color:var(--text-light);}
+
+  header.topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 22px;background:var(--bg-panel);
+    border-bottom:1px solid var(--border-col);flex-shrink:0;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{width:34px;height:34px;flex-shrink:0;}
+  .brand-text h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.3px;}
+  .brand-text p{margin:1px 0 0;font-size:9.5px;letter-spacing:1.6px;color:var(--text-dim);}
+  .topbar-center{display:flex;align-items:center;gap:22px;font-size:13px;color:var(--text-light);}
+  .tb-item{display:flex;align-items:center;gap:7px;}
+  .tb-item svg{width:16px;height:16px;color:var(--text-dim);}
+  .divider-v{width:1px;height:20px;background:var(--border-col);}
+  .topbar-right{display:flex;align-items:center;gap:14px;font-size:12.5px;}
+  .truck-id{display:flex;align-items:center;gap:9px;}
+  .truck-id svg{width:22px;height:22px;color:var(--text-dim);}
+  .truck-id .lbl{font-weight:700;letter-spacing:.4px;}
+  .truck-id .op{color:var(--text-dim);font-size:11px;}
+  .status-icons{display:flex;align-items:center;gap:8px;color:var(--text-dim);}
+  .status-icons svg{width:18px;height:18px;}
+
+  main.content{flex:1;display:flex;gap:14px;padding:14px 18px;min-height:0;}
+
+  /* ---- map panel ---- */
+  .map-panel{flex:1;position:relative;z-index:1;border-radius:10px;overflow:hidden;background:#232323;}
+  #leafletMap{position:absolute;inset:0;width:100%;height:100%;background:#232323;}
+
+  /* Leaflet dark-theme overrides */
+  .leaflet-control-zoom{border:1px solid rgba(255,255,255,0.18) !important;border-radius:8px !important;overflow:hidden;}
+  .leaflet-control-zoom a{background:rgba(10,20,31,0.85) !important;color:#fff !important;border-color:rgba(255,255,255,0.14) !important;}
+  .leaflet-control-zoom a:hover{background:rgba(20,40,60,0.95) !important;}
+  .leaflet-control-scale-line{background:rgba(10,20,31,0.75) !important;color:#fff !important;
+    border-color:#dfe9f3 !important;font-size:11px !important;padding:1px 6px !important;}
+  .leaflet-container{font-family:inherit;background:#232323;}
+  .leaflet-control-attribution{background:rgba(10,20,31,0.6) !important;color:#9fb3c4 !important;font-size:9px !important;}
+  .leaflet-control-attribution a{color:#cfe0ee !important;}
+  .leaflet-bar{box-shadow:0 3px 8px rgba(0,0,0,0.5) !important;}
+  .leaflet-pane, .leaflet-marker-icon{outline:none;}
+  .gps-dot{width:16px;height:16px;border-radius:50%;background:#2f8fef;border:2px solid #fff;
+    box-shadow:0 0 0 4px rgba(47,143,239,0.35);}
+  .gps-pulse{width:16px;height:16px;border-radius:50%;background:rgba(47,143,239,0.55);
+    animation:gpsPulse 1.8s infinite;}
+  @keyframes gpsPulse{0%{transform:scale(1);opacity:0.8;}100%{transform:scale(3.2);opacity:0;}}
+  .camera-controls{position:absolute;top:14px;left:14px;display:flex;gap:10px;z-index:5000;}
+  .cam-btn{
+    display:flex;align-items:center;gap:8px;padding:8px 14px 8px 12px;
+    background:rgba(10,20,31,0.82);border:1px solid rgba(255,255,255,0.14);
+    border-radius:9px;color:#fff;font-size:13px;cursor:pointer;backdrop-filter:blur(2px);
+    user-select:none;transition:box-shadow .15s,border-color .15s;
+  }
+  .cam-btn svg{width:16px;height:16px;color:#cfe0ee;}
+  .cam-btn .chev{width:11px;height:11px;margin-left:2px;color:#9fb3c4;}
+  .cam-btn.active{border-color:var(--accent-blue);box-shadow:0 0 0 1px var(--accent-blue);}
+
+  .live-cam-panel{position:absolute;right:14px;bottom:14px;z-index:5000;width:240px;
+    background:rgba(9,18,28,0.85);border:1px solid rgba(255,255,255,0.16);border-radius:10px;
+    overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.5);cursor:pointer;}
+  .live-cam-panel .lcp-head{display:flex;align-items:center;justify-content:space-between;
+    padding:6px 10px;font-size:11px;font-weight:700;letter-spacing:.4px;color:#fff;
+    background:rgba(0,0,0,0.35);}
+  .live-cam-panel .lcp-head .dot{width:8px;height:8px;border-radius:50%;background:var(--success);
+    box-shadow:0 0 0 3px rgba(59,196,106,0.25);animation:gpsPulse 2s infinite;margin-right:6px;}
+  .live-cam-panel .lcp-head span{display:flex;align-items:center;}
+  .live-cam-panel .lcp-toggle{display:flex;gap:4px;}
+  .live-cam-panel .lcp-toggle button{border:1px solid rgba(255,255,255,0.25);background:transparent;
+    color:#cfe0ee;font-size:9.5px;padding:2px 6px;border-radius:5px;cursor:pointer;}
+  .live-cam-panel .lcp-toggle button.active{background:var(--accent-blue);color:#fff;border-color:var(--accent-blue);}
+  .live-cam-panel .lcp-video{position:relative;width:100%;aspect-ratio:4/3;background:#0a141f;overflow:hidden;}
+  .live-cam-panel .lcp-video img{width:100%;height:100%;object-fit:cover;display:block;}
+  .live-cam-panel .lcp-video .lcp-tag{position:absolute;bottom:5px;left:6px;font-size:10px;color:#fff;
+    background:rgba(0,0,0,0.5);padding:2px 6px;border-radius:4px;}
+
+  .compass{position:absolute;left:3.9%;top:22%;width:56px;height:56px;border-radius:50%;
+    background:rgba(9,18,28,0.72);border:1px solid rgba(255,255,255,0.15);
+    display:flex;align-items:center;justify-content:center;z-index:5;}
+  .compass svg{width:22px;height:22px;color:var(--danger);}
+  .compass span{position:absolute;top:4px;font-size:9px;font-weight:700;color:#fff;letter-spacing:1px;}
+
+  .scale-bar{position:absolute;left:8%;bottom:6%;z-index:5;color:#f2f2f2;
+    font-size:11px;text-shadow:0 1px 3px rgba(0,0,0,0.8);}
+  .scale-bar .ticks{display:flex;align-items:flex-end;height:10px;margin-bottom:3px;}
+  .scale-bar .ticks div{width:60px;border-left:1px solid #f2f2f2;height:8px;}
+  .scale-bar .nums{display:flex;gap:38px;}
+
+  .map-label{position:absolute;z-index:4;color:#f4efe6;font-size:12.5px;font-weight:600;
+    text-align:center;text-shadow:0 1px 4px rgba(0,0,0,0.85);line-height:1.3;transform:translate(-50%,-50%);}
+
+  .pin{position:absolute;z-index:6;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;cursor:pointer;}
+  .pin svg{width:30px;height:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));}
+  .pin.green svg{color:var(--success);}
+  .pin.red svg{color:var(--danger);}
+  .pin-tag{margin-top:-4px;background:rgba(9,18,28,0.85);border:1px solid rgba(255,255,255,0.15);
+    padding:4px 9px;border-radius:6px;font-size:11px;white-space:nowrap;color:#fff;font-weight:600;}
+
+  .truck-marker{position:absolute;z-index:7;transform:translate(-50%,-50%);cursor:pointer;transition:left .1s linear, top .1s linear;}
+  .truck-marker svg{width:30px;height:30px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.7));}
+  .truck-marker.you svg{color:#f5a623;}
+  .truck-marker.other svg{color:#e6483a;}
+  .truck-tag{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;
+    background:rgba(9,18,28,0.9);border:1px solid rgba(255,255,255,0.15);color:#fff;
+    padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;}
+
+  .warn-flag{position:absolute;z-index:6;transform:translate(-50%,-100%);
+    background:var(--danger);color:#fff;font-size:12px;font-weight:700;
+    padding:7px 12px;border-radius:6px;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,.5);
+    animation:pulseFlag 2.2s infinite;}
+  .warn-flag::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);
+    border:6px solid transparent;border-top-color:var(--danger);}
+  @keyframes pulseFlag{0%,100%{opacity:1;}50%{opacity:.72;}}
+  .warn-flag.urgent{animation:pulseFlag .45s infinite, alarmBounce .45s infinite alternate;box-shadow:0 0 18px rgba(230,72,58,.9);font-size:13px;}
+
+  /* ---- warnings panel ---- */
+  .warnings-panel{width:300px;flex-shrink:0;background:var(--bg-panel);border-radius:10px;
+    padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;}
+  .warn-header{display:flex;align-items:center;gap:10px;background:var(--danger-bg);
+    border:1px solid rgba(230,72,58,0.5);border-radius:8px;padding:10px 12px;}
+  .warn-header.info{background:var(--info-bg);border-color:rgba(58,160,242,0.5);}
+  .warn-header svg{width:20px;height:20px;flex-shrink:0;}
+  .warn-header.danger-hd svg{color:var(--danger);}
+  .warn-header.info svg{color:var(--info);}
+  .warn-header b{font-size:14px;}
+  .warn-header.danger-hd b{color:var(--danger);}
+  .warn-header.info b{color:var(--info);}
+
+  .warn-item{display:flex;gap:10px;padding:10px 12px;border-radius:7px;cursor:pointer;
+    background:rgba(255,255,255,0.03);border-left:3px solid var(--warning);transition:background .15s;}
+  .warn-item:hover{background:rgba(255,255,255,0.07);}
+  .warn-item.danger{border-left-color:var(--danger);}
+  .warn-item.blue{border-left-color:var(--info);}
+  .warn-item svg{width:20px;height:20px;flex-shrink:0;margin-top:1px;}
+  .warn-item.warning svg{color:var(--warning);}
+  .warn-item.danger svg{color:var(--danger);}
+  .warn-item.blue svg{color:var(--info);}
+  .warn-item .wt{flex:1;}
+  .warn-item .wt .t1{font-weight:700;font-size:13.5px;}
+  .warn-item.warning .t1{color:var(--warning);}
+  .warn-item.danger .t1{color:var(--danger);}
+  .warn-item.blue .t1{color:var(--info);}
+  .warn-item .t2{font-size:12px;color:var(--text-dim);margin-top:2px;}
+  .warn-item .dist{font-size:12px;font-weight:700;white-space:nowrap;align-self:flex-end;}
+  .warn-item.danger .dist{color:var(--danger);}
+  .warn-item.warning .dist{color:var(--text-dim);}
+  .warn-item .row{display:flex;justify-content:space-between;align-items:flex-end;}
+
+  /* ---- bottom trip bar ---- */
+  .tripbar{margin:0 18px 12px;background:var(--bg-panel);border-radius:10px;
+    padding:14px 20px;display:flex;align-items:center;gap:28px;flex-shrink:0;}
+  .trip-progress{flex:1.4;min-width:0;}
+  .trip-progress .tp-label{font-size:13px;color:var(--text-dim);margin-bottom:8px;}
+  .tp-track{position:relative;height:5px;border-radius:3px;background:#233a4f;margin-bottom:8px;}
+  .tp-fill{position:absolute;left:0;top:0;height:100%;border-radius:3px;
+    background:linear-gradient(90deg,var(--success),#5fd88a);}
+  .tp-dot{position:absolute;top:50%;width:11px;height:11px;border-radius:50%;transform:translate(-50%,-50%);
+    box-shadow:0 0 0 3px var(--bg-panel);}
+  .tp-dot.start{background:var(--success);left:0;}
+  .tp-dot.end{background:#8fa3b6;}
+  .tp-labels{display:flex;justify-content:space-between;font-size:12.5px;}
+  .tp-labels .l1{color:var(--text-light);font-weight:600;}
+  .tp-labels .l2{color:var(--text-dim);font-size:11.5px;}
+  .stat-block{display:flex;align-items:center;gap:10px;padding:0 18px;border-left:1px solid var(--border-col);}
+  .stat-block svg{width:26px;height:26px;color:var(--text-dim);flex-shrink:0;}
+  .stat-block .sv{font-size:16px;font-weight:700;}
+  .stat-block .sl{font-size:11.5px;color:var(--text-dim);}
+  .trip-btns{margin-left:auto;display:flex;flex-direction:column;gap:8px;}
+  .end-trip-btn{display:flex;align-items:center;gap:8px;
+    border:1.5px solid var(--danger);color:var(--danger);background:transparent;
+    padding:11px 20px;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;
+    transition:background .15s,color .15s;}
+  .end-trip-btn svg{width:18px;height:18px;}
+  .end-trip-btn:hover{background:var(--danger);color:#fff;}
+  .end-trip-btn:disabled{opacity:.5;cursor:not-allowed;background:transparent;color:var(--danger);}
+  .start-trip-btn{display:flex;align-items:center;gap:8px;
+    border:1.5px solid var(--success);color:var(--success);background:transparent;
+    padding:11px 20px;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;
+    transition:background .15s,color .15s;}
+  .start-trip-btn svg{width:18px;height:18px;}
+  .start-trip-btn:hover{background:var(--success);color:#0a141f;}
+
+  /* ---- bottom nav ---- */
+  nav.navbar{display:flex;background:var(--bg-panel);border-top:1px solid var(--border-col);
+    padding:8px 10px;flex-shrink:0;}
+  .nav-item{flex:1;display:flex;align-items:center;justify-content:center;gap:9px;
+    padding:12px 6px;margin:2px;border-radius:9px;cursor:pointer;color:var(--text-dim);
+    font-size:14px;font-weight:600;transition:background .15s,color .15s;}
+  .nav-item svg{width:19px;height:19px;}
+  .nav-item.active{background:var(--accent-blue);color:#fff;}
+  .nav-item:not(.active):hover{background:rgba(255,255,255,0.05);color:#fff;}
+
+  /* ---- alt tab panels ---- */
+  .tab-panel{flex:1;background:var(--bg-panel);border-radius:10px;padding:26px;overflow-y:auto;}
+  .tab-panel h2{margin:0 0 18px;font-size:18px;}
+  .grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;}
+  .info-card{background:var(--bg-panel-2);border:1px solid var(--border-col);border-radius:10px;padding:16px;}
+  .info-card .ic-label{font-size:12px;color:var(--text-dim);margin-bottom:8px;}
+  .info-card .ic-value{font-size:22px;font-weight:700;}
+  .msg-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-col);}
+  .msg-row svg{width:22px;height:22px;color:var(--info);flex-shrink:0;}
+  .msg-row .mt{font-weight:700;font-size:13.5px;}
+  .msg-row .ms{color:var(--text-dim);font-size:12.5px;margin-top:2px;}
+  .setting-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border-col);}
+  .toggle{width:42px;height:24px;border-radius:12px;background:#233a4f;position:relative;cursor:pointer;flex-shrink:0;}
+  .toggle::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;
+    top:3px;left:3px;transition:left .15s;}
+  .toggle.on{background:var(--accent-blue);}
+  .toggle.on::after{left:21px;}
+
+  /* ---- overlays ---- */
+  .overlay{position:absolute;inset:0;background:rgba(3,7,11,0.82);display:none;
+    align-items:center;justify-content:center;z-index:10000;}
+  .overlay.show{display:flex;}
+  .modal{background:var(--bg-panel);border:1px solid var(--border-col);border-radius:14px;
+    padding:26px;width:340px;text-align:center;}
+  .modal h3{margin:0 0 10px;font-size:17px;}
+  .modal p{margin:0 0 20px;color:var(--text-dim);font-size:13.5px;}
+  .modal-btns{display:flex;gap:10px;}
+  .modal-btns button{flex:1;padding:11px;border-radius:8px;border:none;font-weight:700;cursor:pointer;font-size:13.5px;}
+  .btn-cancel{background:#233a4f;color:#fff;}
+  .btn-confirm{background:var(--danger);color:#fff;}
+
+  .cam-feed{position:absolute;inset:0;z-index:9000;display:none;flex-direction:column;}
+  .cam-feed.show{display:flex;}
+  .cam-feed .feed-view{flex:1;position:relative;overflow:hidden;}
+  .cam-feed .feed-view.normal{background:linear-gradient(160deg,#8a7860,#5c4c3a 55%,#3b3226);}
+  .cam-feed .feed-view.thermal{background:radial-gradient(circle at 40% 60%,#ffec3a,#ff7a00 30%,#a3006b 55%,#1a0033 85%);}
+  .cam-feed .feed-close{position:absolute;top:14px;right:14px;z-index:2;
+    width:34px;height:34px;border-radius:50%;background:rgba(9,18,28,0.8);
+    display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;}
+  .cam-feed .feed-close svg{width:18px;height:18px;}
+  .cam-feed .feed-tag{position:absolute;bottom:16px;left:16px;background:rgba(9,18,28,0.75);
+    padding:6px 12px;border-radius:6px;font-size:12px;color:#fff;}
+  .heat-blob{position:absolute;border-radius:50%;filter:blur(6px);}
+
+
+  /* ---------- full-screen proximity alarm ---------- */
+  .proximity-alarm{position:absolute;inset:0;z-index:9500;display:none;align-items:center;justify-content:center;
+    background:radial-gradient(circle,rgba(230,72,58,.32),rgba(80,0,0,.88));
+    border:7px solid var(--danger);animation:alarmFlash .55s steps(2,end) infinite;pointer-events:none;}
+  .proximity-alarm.show{display:flex;}
+  .proximity-alarm.visibility-alarm .alarm-distance{display:none;}
+  .alarm-card{width:min(620px,78%);padding:28px 34px;text-align:center;border-radius:18px;
+    background:rgba(18,8,8,.96);border:2px solid #ff5b4d;box-shadow:0 0 45px rgba(230,72,58,.75),0 0 100px rgba(230,72,58,.35);}
+  .alarm-icon{font-size:54px;line-height:1;margin-bottom:10px;animation:alarmBounce .5s infinite alternate;}
+  .alarm-title{font-size:30px;font-weight:900;letter-spacing:1.5px;color:#fff;}
+  .alarm-sub{font-size:17px;font-weight:700;color:#ffb5ae;margin-top:8px;}
+  .alarm-distance{font-size:42px;font-weight:900;color:#fff;margin-top:14px;}
+  .alarm-distance small{font-size:17px;color:#ffb5ae;}
+  @keyframes alarmFlash{0%,49%{opacity:1}50%,100%{opacity:.72}}
+  @keyframes alarmBounce{from{transform:scale(1)}to{transform:scale(1.12)}}
+  .trip-paused-badge{display:none;align-items:center;gap:7px;margin-right:4px;padding:7px 10px;border-radius:7px;
+    background:rgba(242,169,59,.12);border:1px solid rgba(242,169,59,.45);color:var(--warning);font-size:11px;font-weight:800;}
+  .trip-paused-badge.show{display:flex;}
+
+  .toast{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:11000;
+    background:rgba(9,18,28,0.92);border:1px solid var(--border-col);color:#fff;
+    padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;
+    transition:opacity .25s, top .25s;}
+  .toast.show{opacity:1;top:24px;}
+
+  .dim-overlay{position:absolute;inset:0;background:#000;pointer-events:none;opacity:0;
+    transition:opacity .2s;z-index:80;}
+
+  .pulse-ring{position:absolute;inset:-8px;border:2px solid var(--warning);border-radius:50%;
+    animation:ringPulse 1s ease-out;pointer-events:none;}
+  @keyframes ringPulse{0%{transform:scale(0.6);opacity:1;}100%{transform:scale(2.4);opacity:0;}}
+</style>
+</head>
+<body>
+
+<div class="device">
+  <div class="screen-wrap">
+    <div class="dim-overlay" id="dimOverlay"></div>
+    <div class="dashboard" id="dashboard">
+
+      <header class="topbar">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="#2f8fef" stroke-width="1.8"><path d="M3 20 L9 8 L12 13 L15 6 L21 20 Z" fill="#173a56"/><path d="M3 20 L9 8 L12 13 L15 6 L21 20 Z"/></svg>
+          <div class="brand-text">
+            <h1>mineRakshak</h1>
+            <p>SAFER MINES · STRONGER TOMORROW</p>
+          </div>
+        </div>
+        <div class="topbar-center">
+          <div class="tb-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20v-12M22 20v-16"/></svg>
+            <span>GPS</span>
+          </div>
+          <div class="divider-v"></div>
+          <div class="tb-item" id="clockWrap">
+            <span id="clock">10:24</span>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="truck-id">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 17h1a2 2 0 0 0 4 0h8a2 2 0 0 0 4 0h1v-5l-3-4h-4V7H2v10Z"/><circle cx="6.5" cy="17.5" r="1.5"/><circle cx="17.5" cy="17.5" r="1.5"/></svg>
+            <div>
+              <div class="lbl">TRUCK &nbsp;MH-01-4721</div>
+              <div class="op">Operator: Ramesh S.</div>
+            </div>
+          </div>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 10v4" stroke="none" fill="currentColor"/><rect x="4" y="9" width="10" height="6" fill="currentColor" stroke="none"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20v-12"/></svg>
+          </div>
+        </div>
+      </header>
+
+      <main class="content" id="mainContent">
+
+        <!-- ================= NAVIGATION TAB ================= -->
+        <div id="panel-navigation" style="display:flex;flex:1;gap:14px;min-height:0;">
+          <div class="map-panel" id="mapPanel">
+
+            <div id="leafletMap"></div>
+
+            <div class="compass"><span>N</span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 L15 12 L12 10 L9 12 Z"/></svg></div>
+
+            <div class="live-cam-panel" id="liveCamPanel" onclick="openCamera(livePanelMode)">
+              <div class="lcp-head">
+                <span><span class="dot"></span>LIVE CAMERA</span>
+                <div class="lcp-toggle">
+                  <button id="lcpNormalBtn" class="active" onclick="event.stopPropagation(); setLivePanelMode('normal')">Normal</button>
+                  <button id="lcpThermalBtn" onclick="event.stopPropagation(); setLivePanelMode('thermal')">Thermal</button>
+                </div>
+              </div>
+              <div class="lcp-video">
+                <img id="livePanelImg" src="/camera/feed" alt="Live camera feed" onerror="this.dataset.err='1';">
+                <div class="lcp-tag">Front · External Cam</div>
+              </div>
+            </div>
+
+          </div>
+
+          <aside class="warnings-panel">
+            <div class="warn-header danger-hd">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 22 20H2Z"/><path d="M12 9v5M12 17h.01"/></svg>
+              <b id="warningCount">Warnings (2)</b>
+            </div>
+            <div class="warn-item danger" id="lowVisibilityWarning" style="display:none;" onclick="showBackendAlertDetails()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M5 8h14M7 16h10"/><path d="M4 4l16 16"/></svg>
+              <div class="wt">
+                <div class="row"><span class="t1" id="lowVisibilityTitle">Low visibility</span><span class="dist" id="visibilityValue">—</span></div>
+                <div class="t2" id="lowVisibilitySub">Slow down</div>
+              </div>
+            </div>
+            <div class="warn-item warning" onclick="focusMarker('otherTruck',this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 22 20H2Z"/><path d="M12 9v5M12 17h.01"/></svg>
+              <div class="wt">
+                <div class="row"><span class="t1">Crane on right side</span><span class="dist">80 m</span></div>
+                <div class="t2">Keep safe distance</div>
+              </div>
+            </div>
+            <div class="warn-item danger" onclick="focusMarker('otherTruck',this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h.01"/></svg>
+              <div class="wt">
+                <div class="row"><span class="t1">Heavy vehicle ahead</span><span class="dist">120 m</span></div>
+                <div class="t2" style="color:#3aa0f2;">Truck detected on path</div>
+              </div>
+            </div>
+            <div class="warn-header info" style="margin-top:4px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              <b>Info (1)</b>
+            </div>
+            <div class="warn-item blue" onclick="focusMarker('pinCrusher',this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              <div class="wt">
+                <div class="t1">Route updated</div>
+                <div class="t2">To Crusher &amp; Stockyard</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- ================= OTHER TABS ================= -->
+        <div id="panel-tripinfo" class="tab-panel" style="display:none;">
+          <h2>Trip Information</h2>
+          <div class="grid-cards">
+            <div class="info-card"><div class="ic-label">Total Distance</div><div class="ic-value">4.8 km</div></div>
+            <div class="info-card"><div class="ic-label">Distance Covered</div><div class="ic-value">1.2 km</div></div>
+            <div class="info-card"><div class="ic-label">Avg. Speed</div><div class="ic-value">24 km/h</div></div>
+            <div class="info-card"><div class="ic-label">Trip Duration</div><div class="ic-value">18 min</div></div>
+            <div class="info-card"><div class="ic-label">Stops Made</div><div class="ic-value">1</div></div>
+            <div class="info-card"><div class="ic-label">Loads Carried</div><div class="ic-value">3</div></div>
+          </div>
+        </div>
+
+        <div id="panel-vehicle" class="tab-panel" style="display:none;">
+          <h2>Vehicle Status</h2>
+          <div class="grid-cards">
+            <div class="info-card"><div class="ic-label">Engine Temp</div><div class="ic-value">87°C</div></div>
+            <div class="info-card"><div class="ic-label">Fuel Level</div><div class="ic-value">64%</div></div>
+            <div class="info-card"><div class="ic-label">Tire Pressure</div><div class="ic-value">Normal</div></div>
+            <div class="info-card"><div class="ic-label">Oil Level</div><div class="ic-value">Good</div></div>
+            <div class="info-card"><div class="ic-label">Battery</div><div class="ic-value">92%</div></div>
+            <div class="info-card"><div class="ic-label">Brake System</div><div class="ic-value">OK</div></div>
+          </div>
+        </div>
+
+        <div id="panel-messages" class="tab-panel" style="display:none;">
+          <h2>Messages</h2>
+          <div class="msg-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="m4 4 8 8 8-8"/></svg>
+            <div><div class="mt">Control Room</div><div class="ms">Please confirm load weight before crusher drop-off.</div></div>
+          </div>
+          <div class="msg-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="m4 4 8 8 8-8"/></svg>
+            <div><div class="mt">Shift Supervisor</div><div class="ms">Route to Pit A-3 re-opened after blasting clearance.</div></div>
+          </div>
+        </div>
+
+        <div id="panel-settings" class="tab-panel" style="display:none;">
+          <h2>Settings</h2>
+          <div class="setting-row"><span>Voice Alarm</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><span>Thermal Camera Auto-Switch (low light)</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><span>Dust Alert Sensitivity — High</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><span>Units — Metric</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+
+      </main>
+
+      <div class="tripbar">
+        <div class="trip-progress">
+          <div class="tp-label">Trip Progress</div>
+          <div class="tp-track"><div class="tp-fill" id="tpFill" style="width:25%;"></div>
+            <div class="tp-dot start"></div><div class="tp-dot end" style="left:100%;"></div>
+          </div>
+          <div class="tp-labels">
+            <div><div class="l1">Loading Point</div><div class="l2">Pit A-3</div></div>
+            <div style="text-align:right;"><div class="l1">Crusher &amp; Stockyard</div><div class="l2">4.8 km</div></div>
+          </div>
+        </div>
+        <div class="stat-block">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 15 12 12 10 9 12 Z"/><path d="M4 20h16"/></svg>
+          <div><div class="sv" id="distToGo">3.6 km</div><div class="sl">Distance to Go</div></div>
+        </div>
+        <div class="stat-block">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <div><div class="sv" id="etaVal">7 min</div><div class="sl">ETA</div></div>
+        </div>
+        <div class="stat-block">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 12l4-3"/><circle cx="12" cy="12" r="9"/></svg>
+          <div><div class="sv" id="speedVal">28 km/h</div><div class="sl">Current Speed</div></div>
+        </div>
+        <div class="trip-btns">
+          <div class="trip-paused-badge" id="tripPausedBadge">● Navigation paused</div>
+          <button class="start-trip-btn" id="startTripBtn" onclick="startTrip()" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4Z" fill="currentColor" stroke="none"/></svg>
+            Start Trip
+          </button>
+          <button class="end-trip-btn" id="endTripBtn" onclick="showEndTrip()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
+            End Trip
+          </button>
+        </div>
+      </div>
+
+      <nav class="navbar" id="navbar">
+        <div class="nav-item active" data-tab="navigation" onclick="switchTab('navigation',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/></svg>
+          Navigation
+        </div>
+        <div class="nav-item" data-tab="tripinfo" onclick="switchTab('tripinfo',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+          Trip Info
+        </div>
+        <div class="nav-item" data-tab="vehicle" onclick="switchTab('vehicle',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 17h1a2 2 0 0 0 4 0h8a2 2 0 0 0 4 0h1v-5l-3-4h-4V7H2v10Z"/><circle cx="6.5" cy="17.5" r="1.5"/><circle cx="17.5" cy="17.5" r="1.5"/></svg>
+          Vehicle
+        </div>
+        <div class="nav-item" data-tab="messages" onclick="switchTab('messages',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="m4 4 8 8 8-8"/></svg>
+          Messages
+        </div>
+        <div class="nav-item" data-tab="settings" onclick="switchTab('settings',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+          Settings
+        </div>
+      </nav>
+
+    </div>
+
+    <!-- full-screen heavy-vehicle alarm -->
+    <div class="proximity-alarm" id="proximityAlarm" aria-live="assertive">
+      <div class="alarm-card">
+        <div class="alarm-icon">⚠</div>
+        <div class="alarm-title" id="alarmTitle">HEAVY VEHICLE AHEAD</div>
+        <div class="alarm-sub" id="alarmSub">REDUCE SPEED · MAINTAIN SAFE DISTANCE</div>
+        <div class="alarm-distance" id="alarmDistance">120 <small>m</small></div>
+      </div>
+    </div>
+
+    <!-- camera feed overlay -->
+    <div class="cam-feed" id="camFeed">
+      <div class="feed-view normal" id="feedView" style="background:#0a141f;">
+        <img id="fullFeedImg" src="" alt="Live camera feed" style="width:100%;height:100%;object-fit:cover;display:block;">
+        <div class="feed-close" onclick="closeCamera()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </div>
+        <div class="feed-tag" id="feedTag">Normal Camera — Front View</div>
+      </div>
+    </div>
+
+    <!-- end trip confirm -->
+    <div class="overlay" id="endTripOverlay">
+      <div class="modal">
+        <h3>End current trip?</h3>
+        <p>This will stop live tracking to Crusher &amp; Stockyard and close out the current haul.</p>
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="hideOverlay('endTripOverlay')">Cancel</button>
+          <button class="btn-confirm" onclick="confirmEndTrip()">End Trip</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- power confirm -->
+    <div class="overlay" id="powerOverlay">
+      <div class="modal">
+        <h3>Turn off display?</h3>
+        <p>Live safety monitoring keeps running in the background.</p>
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="hideOverlay('powerOverlay')">Cancel</button>
+          <button class="btn-confirm" onclick="powerOff()">Turn Off</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="side-buttons">
+    <div class="bezel-btn" onclick="showOverlay('powerOverlay')" title="Power">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v8"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+    </div>
+    <div class="bezel-btn" onclick="goHome()" title="Home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+    </div>
+    <div class="bezel-btn" id="brightBtn" onclick="cycleBrightness()" title="Brightness">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </div>
+    <div class="bezel-btn on" id="speakerBtn" onclick="toggleVoiceAlarm()" title="Voice Alarm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------- clock ----------
+  function updateClock(){
+    const d = new Date();
+    let h = d.getHours(), m = d.getMinutes();
+    document.getElementById('clock').textContent = (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
+  updateClock();
+  setInterval(updateClock, 15000);
+
+  // ---------- toast ----------
+  let toastTimer;
+
+  // ---------- trip drive timer (declared early so End Trip / Start Trip
+  // can always safely stop/start the truck's movement, regardless of
+  // when the map below finishes initializing) ----------
+  let driveTimer = null;
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+  }
+
+  // ---------- overlays ----------
+  function showOverlay(id){ document.getElementById(id).classList.add('show'); }
+  function hideOverlay(id){ document.getElementById(id).classList.remove('show'); }
+
+  // ---------- tabs ----------
+  function switchTab(name, el){
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('panel-navigation').style.display = (name==='navigation') ? 'flex' : 'none';
+    ['tripinfo','vehicle','messages','settings'].forEach(t=>{
+      document.getElementById('panel-'+t).style.display = (t===name) ? 'block' : 'none';
+    });
+    if(name==='navigation' && window.mineMap){
+      setTimeout(()=>window.mineMap.invalidateSize(), 60);
+    }
+  }
+  function goHome(){
+    switchTab('navigation', document.querySelector('.nav-item[data-tab="navigation"]'));
+    showToast('Returned to Navigation');
+  }
+
+  // ---------- camera feed (real, live MJPEG stream from the backend) ----------
+  let livePanelMode = 'normal';
+  function setLivePanelMode(mode){
+    livePanelMode = mode;
+    document.getElementById('lcpNormalBtn').classList.toggle('active', mode==='normal');
+    document.getElementById('lcpThermalBtn').classList.toggle('active', mode==='thermal');
+    document.getElementById('livePanelImg').src = (mode==='thermal' ? '/camera/feed/thermal' : '/camera/feed') + '?t=' + Date.now();
+  }
+  // If the stream ever drops (network hiccup, browser pausing the tab, etc.)
+  // automatically reconnect instead of leaving a blank/broken panel.
+  (function attachLiveFeedRecovery(){
+    const img = document.getElementById('livePanelImg');
+    let retryTimer = null;
+    function reconnect(){
+      if (retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        img.src = (livePanelMode === 'thermal' ? '/camera/feed/thermal' : '/camera/feed') + '?t=' + Date.now();
+      }, 1000);
+    }
+    img.addEventListener('error', reconnect);
+    img.addEventListener('stalled', reconnect);
+  })();
+  function openCamera(mode){
+    const feed = document.getElementById('camFeed');
+    const tag = document.getElementById('feedTag');
+    const img = document.getElementById('fullFeedImg');
+    feed.classList.add('show');
+    if(mode==='thermal'){
+      tag.textContent = 'Thermal Camera — Front View (live)';
+      img.src = '/camera/feed/thermal?t=' + Date.now();
+    } else {
+      tag.textContent = 'Normal Camera — Front View (live)';
+      img.src = '/camera/feed?t=' + Date.now();
+    }
+  }
+  function closeCamera(){
+    document.getElementById('camFeed').classList.remove('show');
+    document.getElementById('fullFeedImg').src = ''; // stop the stream when closed
+  }
+
+  // ---------- warnings -> focus marker ----------
+  function focusMarker(id, itemEl){
+    const marker = window.mineMarkers && window.mineMarkers[id];
+    if(marker && window.mineMap){
+      window.mineMap.flyTo(marker.getLatLng(), 17, {duration:0.6});
+      const el = marker.getElement();
+      if(el){
+        const ring = document.createElement('div');
+        ring.className = 'pulse-ring';
+        ring.style.position = 'absolute';
+        ring.style.left = '50%'; ring.style.top = '50%';
+        el.appendChild(ring);
+        setTimeout(()=>ring.remove(), 1000);
+      }
+    }
+    if(itemEl){
+      itemEl.style.background = 'rgba(255,255,255,0.12)';
+      setTimeout(()=>{ itemEl.style.background=''; }, 500);
+    }
+  }
+
+  // ---------- trip controls ----------
+  function showEndTrip(){ showOverlay('endTripOverlay'); }
+  function confirmEndTrip(){
+    hideOverlay('endTripOverlay');
+    tripActive = false; // navigation pauses; dashboard remains fully usable
+    if(driveTimer){ clearInterval(driveTimer); driveTimer = null; }
+    hideProximityAlarm();
+    document.getElementById('endTripBtn').style.display = 'none';
+    document.getElementById('startTripBtn').style.display = 'flex';
+    document.getElementById('tripPausedBadge').classList.add('show');
+    showToast('Navigation stopped. Dashboard remains active.');
+  }
+  function startTrip(){
+    if(driveTimer){ clearInterval(driveTimer); driveTimer = null; }
+    tripActive = true;
+    document.getElementById('startTripBtn').style.display = 'none';
+    document.getElementById('endTripBtn').style.display = 'flex';
+    document.getElementById('tripPausedBadge').classList.remove('show');
+    tickDrive();
+    driveTimer = setInterval(tickDrive, 90);
+    showToast('Navigation resumed to Crusher & Stockyard.');
+  }
+
+  // ---------- power ----------
+  function powerOff(){
+    hideOverlay('powerOverlay');
+    const dim = document.getElementById('dimOverlay');
+    dim.style.opacity = 1;
+    dim.style.pointerEvents = 'auto';
+    dim.style.cursor = 'pointer';
+    dim.onclick = ()=>{ dim.style.opacity = 0; dim.style.pointerEvents='none'; dim.onclick=null; };
+    showToast('Display off — tap screen to wake');
+  }
+
+  // ---------- brightness ----------
+  let brightLevel = 0;
+  function cycleBrightness(){
+    brightLevel = (brightLevel + 1) % 3;
+    const dim = document.getElementById('dimOverlay');
+    const levels = [0, 0.18, 0.36];
+    dim.style.opacity = levels[brightLevel];
+    dim.style.pointerEvents = 'none';
+    showToast('Brightness: ' + ['High','Medium','Low'][brightLevel]);
+  }
+
+  // ---------- voice alarm ----------
+  let voiceOn = true;
+  function toggleVoiceAlarm(){
+    voiceOn = !voiceOn;
+    document.getElementById('speakerBtn').classList.toggle('on', voiceOn);
+    if(voiceOn){
+      showToast('Voice Alarm: "Caution, slow down"');
+      speak('Caution. Crane detected on right side. Keep safe distance.');
+    } else {
+      showToast('Voice Alarm muted');
+    }
+  }
+  function speak(text){
+    try{
+      if('speechSynthesis' in window){
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 0.95;
+        window.speechSynthesis.speak(u);
+      }
+    }catch(e){}
+  }
+
+  // ================= REAL SATELLITE MAP (Leaflet + Esri World Imagery) =================
+  // Real open-pit iron-ore mining terrain (Bailadila mining belt, Chhattisgarh, India)
+  const ROUTE = [
+    [18.6588, 81.2206],  // Loading Point Pit A-3
+    [18.6604, 81.2233],
+    [18.6621, 81.2251],
+    [18.6640, 81.2264],  // "Your truck" cruising point
+    [18.6659, 81.2281],  // Heavy vehicle / crane hazard zone
+    [18.6680, 81.2298],
+    [18.6702, 81.2314],
+    [18.6716, 81.2327]   // Crusher & Stockyard
+  ];
+
+  const map = L.map('leafletMap', {
+    zoomControl:false,
+    attributionControl:true,
+    minZoom:14, maxZoom:19
+  }).setView(ROUTE[3], 16);
+  window.mineMap = map;
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics',
+    maxZoom: 19
+  }).addTo(map);
+
+  L.control.zoom({position:'topright'}).addTo(map);
+  L.control.scale({metric:true, imperial:false, position:'bottomleft', maxWidth:120}).addTo(map);
+
+  // route line (haul road)
+  L.polyline(ROUTE, {color:'#173a5c', weight:12, lineCap:'round', lineJoin:'round', opacity:0.95}).addTo(map);
+  L.polyline(ROUTE, {color:'#2f8fef', weight:7, lineCap:'round', lineJoin:'round', opacity:0.95}).addTo(map);
+  L.polyline(ROUTE, {color:'#bfe0ff', weight:2, dashArray:'2 12', opacity:0.9}).addTo(map);
+
+  function divIcon(html){ return L.divIcon({html, className:'', iconSize:[0,0], iconAnchor:[0,0]}); }
+
+  window.mineMarkers = {};
+
+  window.mineMarkers.pinLoad = L.marker(ROUTE[0], {
+    icon: divIcon('<div class="pin green"><svg viewBox="0 0 24 24" fill="currentColor" stroke="#0a141f" stroke-width="1"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4" fill="#0a141f"/></svg><div class="pin-tag">Loading Point<br>Pit A-3</div></div>')
+  }).addTo(map).on('click', ()=>focusMarker('pinLoad'));
+
+  window.mineMarkers.pinCrusher = L.marker(ROUTE[7], {
+    icon: divIcon('<div class="pin red"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg><div class="pin-tag">Crusher &amp;<br>Stockyard</div></div>')
+  }).addTo(map).on('click', ()=>focusMarker('pinCrusher'));
+
+  window.mineMarkers.otherTruck = L.marker(ROUTE[4], {
+    icon: divIcon('<div class="truck-marker other" style="transform:translate(-50%,-50%);"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 16V8a1 1 0 0 1 1-1h9l4 4h3a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><circle cx="7.5" cy="17.5" r="2" fill="#0a141f" stroke="currentColor" stroke-width="1.6"/><circle cx="17.5" cy="17.5" r="2" fill="#0a141f" stroke="currentColor" stroke-width="1.6"/></svg></div>')
+  }).addTo(map).on('click', ()=>focusMarker('otherTruck'));
+
+  window.mineMarkers.warnFlag = L.marker(ROUTE[4], {
+    icon: divIcon('<div class="warn-flag" style="transform:translate(-50%,-160%);">Heavy vehicle ahead</div>')
+  }).addTo(map);
+
+  window.mineMarkers.youTruck = L.marker(ROUTE[3], {
+    icon: divIcon('<div style="position:relative;transform:translate(-50%,-50%);"><div class="gps-pulse" style="position:absolute;left:7px;top:7px;"></div><div class="truck-marker you" style="position:relative;transform:none;"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 16V8a1 1 0 0 1 1-1h9l4 4h3a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><circle cx="7.5" cy="17.5" r="2" fill="#0a141f" stroke="currentColor" stroke-width="1.6"/><circle cx="17.5" cy="17.5" r="2" fill="#0a141f" stroke="currentColor" stroke-width="1.6"/></svg><div class="truck-tag">Your truck</div></div></div>')
+  }).addTo(map).on('click', ()=>focusMarker('youTruck'));
+
+  // ---------- interpolate a point at fraction t (0-1) along ROUTE ----------
+  const routeLatLngs = ROUTE.map(p=>L.latLng(p[0],p[1]));
+  const segLens = [];
+  let totalLen = 0;
+  for(let i=0;i<routeLatLngs.length-1;i++){
+    const d = routeLatLngs[i].distanceTo(routeLatLngs[i+1]);
+    segLens.push(d); totalLen += d;
+  }
+  function pointAtFraction(frac){
+    let target = Math.max(0, Math.min(1, frac)) * totalLen;
+    for(let i=0;i<segLens.length;i++){
+      if(target <= segLens[i] || i === segLens.length-1){
+        const f = segLens[i] ? target/segLens[i] : 0;
+        const a = routeLatLngs[i], b = routeLatLngs[i+1];
+        return L.latLng(a.lat + (b.lat-a.lat)*f, a.lng + (b.lng-a.lng)*f);
+      }
+      target -= segLens[i];
+    }
+    return routeLatLngs[routeLatLngs.length-1];
+  }
+
+
+  // ---------- proximity warning ----------
+  let alarmActive = false;
+  let lastAlarmAt = 0;
+  let alarmAudioTimer = null;
+  let audioCtx = null;
+  function playAlarmTone(){
+    if(!voiceOn) return;
+    try{
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      [0,0.22,0.44].forEach((offset,i)=>{
+        const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+        osc.type='square'; osc.frequency.value=i===1?880:660;
+        gain.gain.setValueAtTime(0.0001,now+offset);
+        gain.gain.exponentialRampToValueAtTime(0.22,now+offset+0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001,now+offset+0.18);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now+offset); osc.stop(now+offset+0.2);
+      });
+    }catch(e){}
+  }
+  function showProximityAlarm(distance){
+    const alarm = document.getElementById('proximityAlarm');
+    document.getElementById('alarmDistance').innerHTML = Math.max(1,Math.round(distance)) + ' <small>m</small>';
+    alarm.classList.add('show');
+    if(voiceOn && Date.now()-lastAlarmAt > 1800){
+      lastAlarmAt = Date.now();
+      playAlarmTone();
+      speak('Warning. Heavy vehicle ahead. Reduce speed and maintain safe distance.');
+    }
+    alarmActive = true;
+  }
+  function hideProximityAlarm(){
+    document.getElementById('proximityAlarm').classList.remove('show');
+    alarmActive = false;
+  }
+
+  // ---------- live truck movement along the real route ----------
+  let t = 0.38; // starting progress along the road (0-1)
+  let tripActive = true; // becomes false once End Trip is confirmed
+  // Safety sensor values are controlled by main.py / Swagger.
+  // The demo truck can still move, but it must not overwrite backend alarms.
+  window.mineRakshakManualMode = true;
+  function tickDrive(){
+    if(!tripActive) return; // dashboard stays live; only navigation movement pauses
+    t += 0.0011;
+    if(t > 0.92){ t = 0.38; } // loop the demo drive
+    const pos = pointAtFraction(t);
+    window.mineMarkers.youTruck.setLatLng(pos);
+
+    // update trip progress + distance readouts
+    const overallProgress = Math.min(1, t/0.92);
+    document.getElementById('tpFill').style.width = (overallProgress*100).toFixed(0)+'%';
+    const remainKm = Math.max(0.1, (4.8*(1-overallProgress))).toFixed(1);
+    document.getElementById('distToGo').textContent = remainKm + ' km';
+    const etaMin = Math.max(1, Math.round(remainKm/28*60));
+    document.getElementById('etaVal').textContent = etaMin + ' min';
+
+    // Backend/Swagger is the source of truth for safety conditions.
+    if(window.mineRakshakManualMode) return;
+
+    // Demo proximity model: heavy vehicle is at ROUTE[4].
+    // The warning is allowed while approaching, but once the truck has
+    // reached the close-warning zone and the distance starts increasing,
+    // the heavy vehicle has been crossed and the warning is permanently
+    // hidden for the remainder of this trip.
+    const heavyVehiclePos = window.mineMarkers.otherTruck.getLatLng();
+    const distanceM = pos.distanceTo(heavyVehiclePos);
+
+    if(!heavyVehiclePassed){
+      if(distanceM <= 170){
+        heavyVehicleWarningTriggered = true;
+      }
+
+      if(
+        heavyVehicleWarningTriggered &&
+        previousHeavyDistance !== null &&
+        distanceM > previousHeavyDistance + 0.5 &&
+        previousHeavyDistance <= 120
+      ){
+        heavyVehiclePassed = true;
+        hideProximityAlarm();
+      } else if(distanceM <= 170){
+        showProximityAlarm(distanceM);
+        const flag = window.mineMarkers.warnFlag?.getElement();
+        if(flag) flag.classList.add('urgent');
+      } else if(distanceM > 210){
+        hideProximityAlarm();
+      }
+    } else {
+      hideProximityAlarm();
+    }
+
+    previousHeavyDistance = distanceM;
+  }
+  driveTimer = setInterval(tickDrive, 90);
+
+  setTimeout(()=>map.invalidateSize(), 200);
+  window.addEventListener('resize', ()=>map.invalidateSize());
+
+  // subtle speed jitter for realism
+  setInterval(()=>{
+    const base = 28;
+    const jitter = Math.round((Math.random()*6)-3);
+    document.getElementById('speedVal').textContent = Math.max(0, base+jitter) + ' km/h';
+  }, 2200);
+</script>
+
+<script>
+/* =========================================================
+   mineRakshak BACKEND CONNECTION
+   FastAPI: http://127.0.0.1:8000
+   ========================================================= */
+const MINERAKSHAK_API = '';
+const MINERAKSHAK_WS = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/dashboard';
+
+let backendConnected = false;
+let backendTripId = null;
+let backendSocket = null;
+let alarmAudioCount = 0;
+let heavyVehiclePassed = false;
+let previousHeavyDistance = null;
+let heavyVehicleWarningTriggered = false;
+let lastBackendAlert = 'SYSTEM NORMAL';
+let lastBackendSeverity = 'NORMAL';
+let lastBackendState = null;
+
+function backendToast(message){
+  if(typeof showToast === 'function') showToast(message);
+}
+
+async function backendFetch(path, options = {}){
+  const response = await fetch(MINERAKSHAK_API + path, {
+    ...options,
+    headers: {'Content-Type':'application/json', ...(options.headers || {})}
+  });
+  if(!response.ok) throw new Error(`Backend HTTP ${response.status}`);
+  return response.json();
+}
+
+function showBackendAlertDetails(){
+  if(!lastBackendState) return;
+  const alert = String(lastBackendState.alert || 'SYSTEM NORMAL').toUpperCase();
+  const action = String(lastBackendState.recommended_action || 'CONTINUE').toUpperCase();
+  showToast(alert.replace(/_/g,' ') + ' — ' + action.replace(/_/g,' '));
+}
+
+function updateWarningPanel(state){
+  const warningCount = document.getElementById('warningCount');
+  const lowItem = document.getElementById('lowVisibilityWarning');
+  const title = document.getElementById('lowVisibilityTitle');
+  const sub = document.getElementById('lowVisibilitySub');
+  const value = document.getElementById('visibilityValue');
+  if(!warningCount || !lowItem) return;
+
+  const alert = String(state.alert || 'SYSTEM NORMAL').toUpperCase();
+  const visibility = Number(state.visibility_m);
+  const isVisibilityAlert = alert.includes('LOW VISIBILITY') ||
+                            alert.includes('DENSE FOG') ||
+                            alert.includes('VISIBILITY');
+
+  lowItem.style.display = isVisibilityAlert ? 'flex' : 'none';
+  if(isVisibilityAlert){
+    title.textContent = alert.includes('DENSE FOG') ? 'Dense fog' : 'Low visibility';
+    sub.textContent = String(state.recommended_action || 'SLOW DOWN')
+      .replace(/_/g,' ')
+      .toLowerCase()
+      .replace(/^./, c => c.toUpperCase());
+    value.textContent = Number.isFinite(visibility) ? Math.round(visibility) + ' m' : '—';
+  }
+
+  warningCount.textContent = 'Warnings (' + (isVisibilityAlert ? 3 : 2) + ')';
+}
+
+function setAlarmContent(title, sub, distance, visibilityAlarm=false){
+  const alarm = document.getElementById('proximityAlarm');
+  const titleEl = document.getElementById('alarmTitle');
+  const subEl = document.getElementById('alarmSub');
+  const distEl = document.getElementById('alarmDistance');
+  if(!alarm || !titleEl || !subEl || !distEl) return;
+
+  titleEl.textContent = title;
+  subEl.textContent = sub;
+  alarm.classList.toggle('visibility-alarm', visibilityAlarm);
+
+  if(visibilityAlarm){
+    distEl.innerHTML = '';
+  }else{
+    distEl.innerHTML = Math.max(1, Math.round(Number(distance) || 0)) + ' <small>m</small>';
+  }
+  alarm.classList.add('show');
+}
+
+function speakHindi(text){
+  try{
+    if(!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const hindiVoice = voices.find(v => /^hi-IN$/i.test(v.lang)) || voices.find(v => /^hi/i.test(v.lang));
+    if(hindiVoice) utterance.voice = hindiVoice;
+    utterance.lang = hindiVoice ? hindiVoice.lang : 'hi-IN';
+    utterance.rate = 0.82;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  }catch(e){}
+}
+
+function triggerBackendVoiceAlarm(alert){
+  if(!voiceOn || alarmAudioCount >= 2) return;
+
+  alarmAudioCount++;
+  playAlarmTone();
+
+  const visibilityAlert = alert.includes('LOW VISIBILITY') || alert.includes('DENSE FOG') || alert.includes('VISIBILITY');
+  if(alarmAudioCount === 1){
+    if(visibilityAlert){
+      speak('Warning. Low visibility detected. Slow down and drive carefully.');
+    }else if(alert.includes('HEAVY VEHICLE')){
+      speak('Warning. Heavy vehicle ahead. Reduce speed and maintain safe distance.');
+    }else{
+      speak('Warning. Safety condition detected. Please slow down and drive carefully.');
+    }
+  }else{
+    if(visibilityAlert){
+      speakHindi('सावधान। कम दृश्यता है। कृपया गति कम करें और सावधानी से वाहन चलाएं।');
+    }else if(alert.includes('HEAVY VEHICLE')){
+      speakHindi('सावधान। आगे भारी वाहन है। कृपया गति कम करें और सुरक्षित दूरी बनाए रखें।');
+    }else{
+      speakHindi('सावधान। आगे सुरक्षा संबंधी चेतावनी है। कृपया गति कम करें।');
+    }
+  }
+}
+
+function showBackendAlert(state){
+  const alert = String(state.alert || 'SYSTEM NORMAL').toUpperCase();
+  const severity = String(state.severity || 'NORMAL').toUpperCase();
+  const action = String(state.recommended_action || 'CONTINUE').toUpperCase();
+  const distance = Number(state.heavy_vehicle_distance_m || 0);
+  const visibilityAlert = alert.includes('LOW VISIBILITY') || alert.includes('DENSE FOG') || alert.includes('VISIBILITY');
+
+  lastBackendState = state;
+  updateWarningPanel(state);
+
+  if(severity === 'CRITICAL' || severity === 'HIGH'){
+    if(alert.includes('HEAVY VEHICLE') && state.heavy_vehicle_detected && !heavyVehiclePassed){
+      setAlarmContent('HEAVY VEHICLE AHEAD', action, distance, false);
+      const flag = window.mineMarkers?.warnFlag?.getElement();
+      if(flag) flag.classList.add('urgent');
+    }else if(visibilityAlert){
+      setAlarmContent(alert.includes('DENSE FOG') ? 'DENSE FOG' : 'LOW VISIBILITY', action, 0, true);
+      const flag = window.mineMarkers?.warnFlag?.getElement();
+      if(flag) flag.classList.remove('urgent');
+    }else if(alert.includes('SPEED TOO HIGH')){
+      setAlarmContent('SLOW DOWN', action, 0, true);
+      const flag = window.mineMarkers?.warnFlag?.getElement();
+      if(flag) flag.classList.remove('urgent');
+    }else{
+      hideProximityAlarm();
+    }
+
+    // Voice warning is triggered once when a new backend alert appears.
+    if(alert !== lastBackendAlert || severity !== lastBackendSeverity){
+      triggerBackendVoiceAlarm(alert);
+    }
+  }else{
+    hideProximityAlarm();
+    const flag = window.mineMarkers?.warnFlag?.getElement();
+    if(flag) flag.classList.remove('urgent');
+  }
+
+  lastBackendAlert = alert;
+  lastBackendSeverity = severity;
+}
+
+function applyBackendState(state){
+  if(!state) return;
+  lastBackendState = state;
+
+  if(state.speed_kmh !== undefined){
+    document.getElementById('speedVal').textContent = `${Math.round(Number(state.speed_kmh))} km/h`;
+  }
+
+  // Backend/main.py is the source of truth. The frontend never posts
+  // simulated sensor values, so Swagger/manual changes are not overwritten.
+  showBackendAlert(state);
+}
+
+function connectMineRakshakBackend(){
+  backendFetch('/api/health')
+    .then(() => {
+      backendConnected = true;
+      backendToast('Backend connected — live safety data active');
+      return backendFetch('/api/dashboard');
+    })
+    .then(applyBackendState)
+    .catch(() => {
+      backendConnected = false;
+      backendToast('Backend offline — start FastAPI on port 8000');
+    });
+
+  try{
+    backendSocket = new WebSocket(MINERAKSHAK_WS);
+
+    backendSocket.onopen = () => {
+      backendConnected = true;
+      backendToast('Live WebSocket connected');
+    };
+
+    backendSocket.onmessage = (event) => {
+      try{
+        const message = JSON.parse(event.data);
+        if(message.type === 'dashboard_update') applyBackendState(message.data);
+      }catch(e){}
+    };
+
+    backendSocket.onerror = () => { backendConnected = false; };
+
+    backendSocket.onclose = () => {
+      backendConnected = false;
+      setTimeout(connectMineRakshakBackend, 3000);
+    };
+  }catch(e){}
+}
+
+/* Backend-aware trip start */
+async function startTrip(){
+  if(driveTimer){ clearInterval(driveTimer); driveTimer = null; }
+  alarmAudioCount = 0;
+  heavyVehiclePassed = false;
+  previousHeavyDistance = null;
+  heavyVehicleWarningTriggered = false;
+  lastBackendAlert = 'SYSTEM NORMAL';
+  lastBackendSeverity = 'NORMAL';
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+
+  try{
+    const result = await backendFetch('/api/trip/start', {
+      method:'POST',
+      body:JSON.stringify({vehicle_id:'TRUCK-01'})
+    });
+    backendTripId = result.trip_id || backendTripId;
+    backendConnected = true;
+  }catch(e){
+    backendToast('Cannot start trip: backend is offline');
+    return;
+  }
+
+  tripActive = true;
+  document.getElementById('startTripBtn').style.display = 'none';
+  document.getElementById('endTripBtn').style.display = 'flex';
+  document.getElementById('tripPausedBadge').classList.remove('show');
+
+  tickDrive();
+  driveTimer = setInterval(tickDrive, 90);
+
+  // IMPORTANT: no frontend telemetry POST loop. main.py/Swagger controls sensors.
+  showToast('Trip started — backend safety monitoring active.');
+}
+
+/* Backend-aware trip end */
+async function confirmEndTrip(){
+  hideOverlay('endTripOverlay');
+
+  try{
+    await backendFetch('/api/trip/end', {method:'POST'});
+  }catch(e){
+    backendToast('Backend could not confirm trip end');
+  }
+
+  tripActive = false;
+  if(driveTimer){ clearInterval(driveTimer); driveTimer = null; }
+
+  hideProximityAlarm();
+  document.getElementById('endTripBtn').style.display = 'none';
+  document.getElementById('startTripBtn').style.display = 'flex';
+  document.getElementById('tripPausedBadge').classList.add('show');
+
+  backendTripId = null;
+  heavyVehiclePassed = false;
+  previousHeavyDistance = null;
+  heavyVehicleWarningTriggered = false;
+  lastBackendAlert = 'SYSTEM NORMAL';
+  lastBackendSeverity = 'NORMAL';
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+  showToast('Trip ended — telemetry saved to backend.');
+}
+
+/* Stop the original automatic demo drive until Start Trip is pressed. */
+if(driveTimer){
+  clearInterval(driveTimer);
+  driveTimer = null;
+}
+tripActive = false;
+document.getElementById('startTripBtn').style.display = 'flex';
+document.getElementById('endTripBtn').style.display = 'none';
+document.getElementById('tripPausedBadge').classList.add('show');
+
+connectMineRakshakBackend();
+</script>
+
+</body>
+</html>
