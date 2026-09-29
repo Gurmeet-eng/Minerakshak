@@ -50,8 +50,8 @@ BASE_DIR = Path(__file__).resolve().parent
 #   MINERAKSHAK_CAMERA=1                  (force a specific index)
 #   MINERAKSHAK_CAMERA=rtsp://...         (an IP camera instead)
 # ----------------------------------------------------------------------------
-GEMBIRD_USB_VENDOR_ID = "1908"
-GEMBIRD_USB_PRODUCT_ID = "2310"
+GEMBIRD_USB_VENDOR_ID = "046d"
+GEMBIRD_USB_PRODUCT_ID = "0825"
 
 
 def find_video_index_by_usb_id(vendor_id: str, product_id: str) -> Optional[int]:
@@ -99,7 +99,7 @@ if _env_source:
         DEFAULT_CAMERA_SOURCE = _env_source  # RTSP / HTTP URL / device path
 else:
     _detected = find_video_index_by_usb_id(GEMBIRD_USB_VENDOR_ID, GEMBIRD_USB_PRODUCT_ID)
-    DEFAULT_CAMERA_SOURCE = _detected if _detected is not None else 0
+    DEFAULT_CAMERA_SOURCE = _detected if _detected is not None else 2
 
 
 class CameraStream:
@@ -172,22 +172,6 @@ def _placeholder_frame(text: str):
     return frame
 
 
-# Some cameras (like this Gembird one) report frames upside down / sideways
-# depending on how they're physically mounted. Rotate them right way up here.
-# Override with MINERAKSHAK_CAMERA_ROTATE = 0, 90, 180, or 270.
-_ROTATE_MAP = {
-    0: None,
-    90: cv2.ROTATE_90_CLOCKWISE,
-    180: cv2.ROTATE_180,
-    270: cv2.ROTATE_90_COUNTERCLOCKWISE,
-}
-try:
-    CAMERA_ROTATE_DEGREES = int(os.environ.get("MINERAKSHAK_CAMERA_ROTATE", "180"))
-except ValueError:
-    CAMERA_ROTATE_DEGREES = 180
-_ROTATE_CODE = _ROTATE_MAP.get(CAMERA_ROTATE_DEGREES, cv2.ROTATE_180)
-
-
 # ----------------------------------------------------------------------------
 # YOLO person / vehicle detection
 #
@@ -246,8 +230,6 @@ def _detection_loop():
         if frame is None:
             continue
         try:
-            if _ROTATE_CODE is not None:
-                frame = cv2.rotate(frame, _ROTATE_CODE)
             model = _get_yolo_model()
             results = model(frame, verbose=False, conf=YOLO_CONF_THRESHOLD, classes=YOLO_TARGET_CLASS_IDS)
             found = []
@@ -288,8 +270,6 @@ def _mjpeg_generator(mode: str = "normal"):
         if frame is None:
             frame = _placeholder_frame(camera.last_error or "Connecting to external camera...")
         else:
-            if _ROTATE_CODE is not None:
-                frame = cv2.rotate(frame, _ROTATE_CODE)
             if mode == "thermal":
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 frame = cv2.applyColorMap(255 - gray, cv2.COLORMAP_JET)
@@ -479,7 +459,6 @@ def camera_status():
         "running": camera.running,
         "source": camera.source,
         "error": camera.last_error,
-        "rotation_degrees": CAMERA_ROTATE_DEGREES,
         "gembird_detected_via_usb_id": find_video_index_by_usb_id(
             GEMBIRD_USB_VENDOR_ID, GEMBIRD_USB_PRODUCT_ID
         ),
